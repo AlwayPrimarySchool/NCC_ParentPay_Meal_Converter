@@ -66,7 +66,7 @@
     #fileInput, #weeklyFileInput { display: none; }
 
     #status, #weeklyStatus { margin-top: 18px; font-size: 14px; min-height: 20px; }
-    #status.error, #weeklyStatus.error { color: #b00020; font-weight: bold; }
+    #status.error, #weeklyStatus.error { color: #2e7d32; font-weight: bold; }
     #status.working, #weeklyStatus.working { color: #666; }
 
     .guide { text-align: left; margin-top: 20px; font-size: 13px; color: #555; }
@@ -80,10 +80,10 @@
       background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 999;
     }
     #modalBox { background: white; border-radius: 10px; padding: 28px 32px; max-width: 420px; text-align: center; }
-    #modalBox h2 { margin-top: 0; font-size: 18px; color: #b00020; }
+    #modalBox h2 { margin-top: 0; font-size: 18px; color: #2e7d32; }
     #modalBox p { font-size: 14px; line-height: 1.5; }
     #modalBox button { margin: 6px; padding: 10px 22px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
-    #modalConfirm { background: #b00020; color: white; }
+    #modalConfirm { background: #2e7d32; color: white; }
     #modalCancel { background: #eee; color: #333; }
 
     /* ---------- Selection screen ---------- */
@@ -108,7 +108,7 @@
       background: #eee; border: none; padding: 6px 14px; border-radius: 4px; font-size: 13px; cursor: pointer;
     }
     #printBtn {
-      background: #b00020; color: white; border: none; padding: 12px 26px;
+      background: #2e7d32; color: white; border: none; padding: 12px 26px;
       border-radius: 6px; font-size: 15px; cursor: pointer; margin-top: 10px;
     }
     .print-tip { font-size: 12px; color: #888; margin-top: 10px; }
@@ -116,7 +116,7 @@
     /* ---------- Toolbar (screen only) ---------- */
     #toolbar { display: none; text-align: center; margin-bottom: 20px; }
     #toolbar button {
-      background: #b00020; color: white; border: none; padding: 10px 20px;
+      background: #2e7d32; color: white; border: none; padding: 10px 20px;
       border-radius: 4px; font-size: 14px; cursor: pointer; margin: 0 6px;
     }
 
@@ -258,7 +258,7 @@
     .weekly-table tr.wk-subtotal td { font-weight: bold; border-top: 3px double #444; background: #fafafa; }
     .wk-copybar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 20px; }
     .wk-btn {
-      background: #b00020; color: #fff; border: none; padding: 11px 20px;
+      background: #2e7d32; color: #fff; border: none; padding: 11px 20px;
       border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer;
     }
     .wk-btn.secondary { background: #eee; color: #333; font-weight: normal; }
@@ -267,7 +267,7 @@
     .wk-opts label { cursor: pointer; }
     #wkCopyMsg { font-size: 13px; min-height: 18px; margin-top: 12px; }
     #wkCopyMsg.ok { color: #1a7f37; font-weight: bold; }
-    #wkCopyMsg.err { color: #b00020; font-weight: bold; }
+    #wkCopyMsg.err { color: #2e7d32; font-weight: bold; }
     .wk-note { font-size: 12px; color: #777; margin-top: 14px; line-height: 1.5; }
 
     @media print {
@@ -634,12 +634,12 @@
           } catch (err) {
             data.comparison = null;
             compareStatus.textContent = 'Error: ' + err.message;
-            compareStatus.style.color = '#b00020';
+            compareStatus.style.color = '#2e7d32';
           }
         };
         reader.onerror = () => {
           compareStatus.textContent = 'Could not read the file.';
-          compareStatus.style.color = '#b00020';
+          compareStatus.style.color = '#2e7d32';
         };
         reader.readAsArrayBuffer(file);
       };
