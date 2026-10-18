@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<!--
+  Booking List Converter and Weekly Meal Reconciliation
+  Copyright (c) 2026 Elliot Pope. All rights reserved.
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Booking List Converter</title>
+  <meta name="author" content="Elliot Pope">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    /* Copyright (c) 2026 Elliot Pope. All rights reserved. */
+    @page { size: auto; margin: 10mm; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #222;
+      background: #eef1f8;
+      min-height: 100vh;
+    }
+
+    /* ---------- Upload screen ---------- */
+    #uploadScreen, #weeklyUploadScreen {
+      min-height: calc(100vh - 64px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4vh 4vw;
+      box-sizing: border-box;
+    }
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.10);
+      padding: 40px 36px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-sizing: border-box;
+    }
+    #uploadScreen h1, #weeklyUploadScreen h1 { font-size: 20px; margin: 0 0 24px 0; }
+    #uploadScreen .card, #weeklyUploadScreen .card {
+      max-width: none;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    #uploadScreen #dropzone, #weeklyUploadScreen #weeklyDropzone { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+    #dropzone, #weeklyDropzone {
+      border: 3px dashed #2e7d32;
+      border-radius: 12px;
+      padding: 60px 20px;
+      cursor: pointer;
+      background: #f1f8f2;
+      transition: background 0.15s;
+    }
+    #dropzone.dragover, #weeklyDropzone.dragover { background: #dcedde; }
+    #dropzone .big, #weeklyDropzone .big { font-size: 26px; font-weight: bold; color: #2e7d32; margin-bottom: 8px; }
+    #dropzone .small, #weeklyDropzone .small { font-size: 14px; color: #666; }
+    #fileInput, #weeklyFileInput { display: none; }
+
+    #status, #weeklyStatus { margin-top: 18px; font-size: 14px; min-height: 20px; }
+    #status.error, #weeklyStatus.error { color: #b00020; font-weight: bold; }
+    #status.working, #weeklyStatus.working { color: #666; }
+
+    .guide { text-align: left; margin-top: 20px; font-size: 13px; color: #555; }
+    .guide summary { cursor: pointer; font-weight: bold; color: #2e7d32; }
+    .guide ol { margin: 10px 0 0 0; padding-left: 20px; line-height: 1.6; }
+    .guide a { color: #2e7d32; }
+
+    /* ---------- Confirm modal ---------- */
+    #modalOverlay {
+      display: none; position: fixed; top:0; left:0; right:0; bottom:0;
+      background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 999;
+    }
+    #modalBox { background: white; border-radius: 10px; padding: 28px 32px; max-width: 420px; text-align: center; }
+    #modalBox h2 { margin-top: 0; font-size: 18px; color: #b00020; }
+    #modalBox p { font-size: 14px; line-height: 1.5; }
+    #modalBox button { margin: 6px; padding: 10px 22px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+    #modalConfirm { background: #b00020; color: white; }
+    #modalCancel { background: #eee; color: #333; }
+
+    /* ---------- Selection screen ---------- */
+    #selectScreen {
+      display: none;
+      min-height: calc(100vh - 64px);
+      box-sizing: border-box;
+      padding: 50px 24px;
+      justify-content: center;
+    }
+    #selectScreen .card { max-width: 640px; text-align: left; }
+    #selectScreen h1 { font-size: 19px; margin: 0 0 4px 0; }
+    #selectScreen .sub { font-size: 13px; color: #666; margin-bottom: 18px; }
+    .select-row {
+      display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+      border: 1px solid #ddd; border-radius: 6px; margin-bottom: 6px;
+    }
+    .select-row .dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+    .select-row label { flex: 1; font-size: 14px; cursor: pointer; }
+    .select-actions { display: flex; gap: 10px; margin: 14px 0; }
+    .select-actions button {
+      background: #eee; border: none; padding: 6px 14px; border-radius: 4px; font-size: 13px; cursor: pointer;
+    }
+    #printBtn {
+      background: #b00020; color: white; border: none; padding: 12px 26px;
+      border-radius: 6px; font-size: 15px; cursor: pointer; margin-top: 10px;
+    }
+    .print-tip { font-size: 12px; color: #888; margin-top: 10px; }
+
+    /* ---------- Toolbar (screen only) ---------- */
+    #toolbar { display: none; text-align: center; margin-bottom: 20px; }
+    #toolbar button {
+      background: #b00020; color: white; border: none; padding: 10px 20px;
+      border-radius: 4px; font-size: 14px; cursor: pointer; margin: 0 6px;
+    }
+
+    /* ---------- Printable output ---------- */
+    #output { display: none; }
+    #summarySection { page-break-after: always; }
+
+    .report-title { font-size: 20px; font-weight: bold; margin-bottom: 2px; }
+    .report-sub { font-size: 13px; color: #555; margin-bottom: 14px; }
+    .section-heading { font-size: 15px; font-weight: bold; margin: 14px 0 6px 0; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 14px; }
+    th, td { border: 1px solid #999; padding: 6px 10px; text-align: left; }
+    th { font-weight: bold; }
+
+    .totals-table { border: none; }
+    .totals-table td, .totals-table th {
+      border: none;
+      border-bottom: 1px solid #e3e3e3;
+      padding: 7px 4px;
+    }
+    .totals-table th { border-bottom: 2px solid #999; }
+    .totals-table td.count, .totals-table th.count { text-align: center; width: 70px; }
+    .totals-table td.change, .totals-table th.change { text-align: center; width: 80px; }
+    .totals-table tr.grand-total td { font-weight: bold; border-top: 3px double #333; border-bottom: none; }
+    .row-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle;
+               -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .delta-up { color: #1a7f37; font-weight: bold; }
+    .delta-down { color: #b00020; font-weight: bold; }
+    .delta-same { color: #999; }
+    .compare-note { font-size: 13px; margin-bottom: 8px; }
+    .compare-input-row { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ccc; }
+    .compare-input-row input[type=file] { font-size: 12px; margin-top: 6px; }
+    #compareStatus { font-size: 12px; color: #666; margin-top: 6px; }
+
+    /* ---------- Class sheet ---------- */
+    .sheet-page {
+      page-break-after: always;
+      break-after: page;
+    }
+    .sheet-page:last-child { page-break-after: auto; break-after: auto; }
+
+    .class-bar {
+      height: 9px;
+      margin-bottom: 10px;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .class-bar.bottom { margin-top: 14px; margin-bottom: 0; }
+
+    .class-title {
+      font-size: 24px; font-weight: bold;
+      padding: 2px 0 6px 14px;
+      border-left: 14px solid #999;
+      margin-bottom: 6px;
+    }
+    .class-continued {
+      font-size: 13px; font-weight: bold; margin-bottom: 8px;
+    }
+    .dietary-flag {
+      color: #b00020; font-weight: bold; font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .meal-table { font-size: 15px; }
+    .meal-table th { border-bottom: 2px solid #999; }
+    .meal-col-head { font-size: 10px; font-weight: bold; text-align: center; width: 60px; padding: 4px 3px; line-height: 1.15; }
+    .meal-col { text-align: center; font-size: 17px; font-weight: bold; padding: 4px 3px; }
+    .totals-row td { font-weight: bold; border-top: 3px double #333; background: #fafafa; }
+    .header-repeat-row td { border-top: none; padding-top: 2px; }
+
+    .dietary-cell { color: #b00020; font-weight: bold; }
+
+    .totals-line { font-size: 13px; margin-top: 6px; }
+    .totals-line b { margin-right: 4px; }
+
+    .print-footer { font-size: 10px; color: #999; margin-top: 10px; }
+
+    .blank-page { display: flex; align-items: center; justify-content: center; height: 250mm; }
+    .blank-note { font-size: 10px; color: #bbb; }
+
+    /* ---------- App bar and tool menu ---------- */
+    #appBar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      height: 64px;
+      box-sizing: border-box;
+      padding: 0 4vw;
+    }
+    .menu-wrap { position: relative; }
+    .menu-btn {
+      display: flex; align-items: center; gap: 10px;
+      background: #fff; color: #2e7d32;
+      border: 1px solid #b7d4ba; border-radius: 8px;
+      padding: 9px 14px; font-size: 14px; font-weight: bold; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .menu-btn:hover { background: #f1f8f2; }
+    .menu-list {
+      position: absolute; right: 0; top: calc(100% + 6px);
+      min-width: 290px;
+      background: #fff; border-radius: 10px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+      padding: 6px; z-index: 50;
+    }
+    .menu-list[hidden] { display: none; }
+    .menu-item {
+      display: block; width: 100%; text-align: left;
+      background: none; border: none; border-radius: 6px;
+      padding: 11px 12px; font-size: 14px; color: #222; cursor: pointer;
+    }
+    .menu-item:hover { background: #f4f4f4; }
+    .menu-item.active { background: #f1f8f2; color: #2e7d32; font-weight: bold; }
+    .menu-item small { display: block; font-weight: normal; color: #777; font-size: 12px; margin-top: 2px; }
+
+    /* ---------- Weekly meal reconciliation tool ---------- */
+    #weeklyResultScreen {
+      display: none;
+      padding: 8px 4vw 40px;
+      box-sizing: border-box;
+      justify-content: center;
+    }
+    #weeklyResultScreen .card { max-width: 1280px; text-align: left; }
+    #weeklyResultScreen h1 { font-size: 20px; margin: 0 0 4px 0; }
+    .wk-sub { font-size: 14px; color: #555; margin-bottom: 16px; }
+    .wk-warnings {
+      display: none;
+      background: #fff8e1; border: 1px solid #f0d98a; color: #6b4e00;
+      border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px;
+    }
+    .wk-warnings ul { margin: 6px 0 0 0; padding-left: 20px; line-height: 1.5; }
+    .wk-scroll { overflow-x: auto; }
+    table.weekly-table { width: auto; min-width: 100%; border-collapse: collapse; margin-bottom: 0; font-size: 14px; }
+    .weekly-table th, .weekly-table td { border: 1px solid #444; padding: 7px 10px; text-align: right; }
+    .weekly-table thead th { text-align: center; background: #f4f4f4; font-weight: bold; }
+    .weekly-table thead th.sub { font-size: 12px; }
+    .weekly-table tbody th { text-align: left; background: #fff; font-weight: bold; white-space: nowrap; }
+    .weekly-table .ps { border-left: 2px solid #444; }
+    .weekly-table tr.wk-subtotal th,
+    .weekly-table tr.wk-subtotal td { font-weight: bold; border-top: 3px double #444; background: #fafafa; }
+    .wk-copybar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 20px; }
+    .wk-btn {
+      background: #b00020; color: #fff; border: none; padding: 11px 20px;
+      border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer;
+    }
+    .wk-btn.secondary { background: #eee; color: #333; font-weight: normal; }
+    .wk-btn.push-right { margin-left: auto; }
+    .wk-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 12px; font-size: 13px; color: #444; }
+    .wk-opts label { cursor: pointer; }
+    #wkCopyMsg { font-size: 13px; min-height: 18px; margin-top: 12px; }
+    #wkCopyMsg.ok { color: #1a7f37; font-weight: bold; }
+    #wkCopyMsg.err { color: #b00020; font-weight: bold; }
+    .wk-note { font-size: 12px; color: #777; margin-top: 14px; line-height: 1.5; }
+
+    @media print {
+      #appBar, #uploadScreen, #selectScreen, #toolbar { display: none !important; }
+      #output { display: block !important; }
+      body { padding: 0; background: #fff; }
+    }
+  </style>
+</head>
+<body>
+
+  <header id="appBar">
+    <div class="menu-wrap">
+      <button type="button" id="menuBtn" class="menu-btn" aria-haspopup="true" aria-expanded="false">
+        <span id="menuCurrent">Booking List Converter</span>
+        <span aria-hidden="true">&#9662;</span>
+      </button>
+      <div id="menuList" class="menu-list" role="menu" hidden>
+        <button type="button" class="menu-item active" role="menuitem" data-tool="booking">
+          Booking List Converter
+          <small>Print class lists for the kitchen</small>
+        </button>
+        <button type="button" class="menu-item" role="menuitem" data-tool="weekly">
+          Weekly Meal Reconciliation
+          <small>Lay out the weekly figures for your spreadsheet</small>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div id="toolBooking">
+
+  <div id="uploadScreen">
+    <div class="card">
+      <h1>Booking List Converter</h1>
+      <div id="dropzone">
+        <div class="big">Attach meal report here</div>
+        <div class="small">Click to browse, or drag a CSV file in</div>
+      </div>
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+      <div id="status"></div>
+
+      <details class="guide">
+        <summary>How do I get this report?</summary>
+        <ol>
+          <li>Go to <a href="https://app.parentpay.com/PPManager4W3/Attendance/Reports/SupervisorRegister/SupervisorRegister.aspx" target="_blank" rel="noopener">ParentPay &rsaquo; Advanced Event Supervisor Report</a></li>
+          <li>Or navigate manually: <b>Attendance, meals &amp; clubs &rsaquo; Reports &rsaquo; Register reports &rsaquo; Advanced event supervisor report</b></li>
+          <li>Set <b>Show reg. group</b> to <b>Yes</b></li>
+          <li>Export to CSV and attach it above</li>
+        </ol>
+      </details>
+    </div>
+  </div>
+
+  <div id="modalOverlay">
+    <div id="modalBox">
+      <h2>Check the date</h2>
+      <p id="modalText"></p>
+      <div>
+        <button id="modalConfirm">Yes, continue</button>
+        <button id="modalCancel">No, pick a different file</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="selectScreen">
+    <div class="card">
+      <h1>What do you need to print?</h1>
+      <div class="sub">Only tick the classes being served now, for less paper, no waiting on a big stack.</div>
+
+      <div class="select-row" style="background:#fafafa">
+        <span class="dot" style="background:#666"></span>
+        <label for="chkSummary">Whole-school totals page (for kitchen prep)</label>
+        <input type="checkbox" id="chkSummary" checked>
+      </div>
+
+      <div class="compare-input-row">
+        <label for="compareFileInput" style="font-size:13px; font-weight:bold;">Optional: compare against an earlier version of this report</label><br>
+        <span style="font-size:12px; color:#777;">Shows how many meals were added or removed since amendments were made, on the totals page.</span><br>
+        <input type="file" id="compareFileInput" accept=".csv,.xlsx,.xls">
+        <div id="compareStatus"></div>
+      </div>
+
+      <div class="select-actions">
+        <button id="selectAllBtn">Select all classes</button>
+        <button id="selectNoneBtn">Select none</button>
+      </div>
+
+      <div id="classCheckboxList"></div>
+
+      <div style="text-align:center">
+        <button id="printBtn">Print selected</button>
+        <div class="print-tip">Tip: in the print dialog's "More settings", untick "Headers and footers" for a clean printout, and turn on double-sided/duplex printing. The layout is built assuming each class is printed back-to-back on its own sheet(s).</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toolbar">
+    <button onclick="backToSelection()">Change selection</button>
+    <button onclick="window.print()">Print again</button>
+    <button onclick="resetApp()">Start over</button>
+  </div>
+
+  <div id="output"></div>
+
+  </div>
+
+  <div id="toolWeekly" style="display:none">
+
+    <div id="weeklyUploadScreen">
+      <div class="card">
+        <h1>Weekly Meal Reconciliation</h1>
+        <div id="weeklyDropzone">
+          <div class="big">Attach weekly meal numbers report here</div>
+          <div class="small">Click to browse, or drag a CSV file in</div>
+        </div>
+        <input type="file" id="weeklyFileInput" accept=".csv">
+        <div id="weeklyStatus"></div>
+
+        <details class="guide">
+          <summary>How do I get this report?</summary>
+          <ol>
+            <li>Go to <a href="https://app.parentpay.com/PPManager4W3/Attendance/Reports/WeeklySummaryUifsm.aspx" target="_blank" rel="noopener">ParentPay &rsaquo; Weekly meal numbers (Report 14)</a></li>
+            <li>Or navigate manually: <b>Attendance, meals &amp; clubs &rsaquo; Reports &rsaquo; Meal number reports &rsaquo; Weekly meal numbers</b></li>
+            <li>Choose the <b>week start date</b> and the <b>week end date</b> (Monday to Friday)</li>
+            <li>Set <b>Show Infant</b> to <b>True</b> and <b>Show Junior</b> to <b>True</b></li>
+            <li>Export to CSV and attach it above</li>
+          </ol>
+        </details>
+      </div>
+    </div>
+
+    <div id="weeklyResultScreen">
+      <div class="card">
+        <h1>Weekly Meal Reconciliation</h1>
+        <div class="wk-sub" id="wkRange"></div>
+        <div class="wk-warnings" id="wkWarnings"></div>
+
+        <div class="wk-scroll" id="wkTableWrap"></div>
+
+        <div class="wk-copybar">
+          <button type="button" class="wk-btn" id="wkCopyData">Copy data</button>
+          <button type="button" class="wk-btn secondary" id="wkCopyTable">Copy table with headings</button>
+          <button type="button" class="wk-btn secondary push-right" id="wkAnother">Attach a different report</button>
+        </div>
+        <div class="wk-opts">
+          <span>Include when copying:</span>
+          <label><input type="checkbox" id="wkOptSubtotal" checked> Subtotal row</label>
+          <label><input type="checkbox" id="wkOptDaily" checked> Daily subtotal and adult meals</label>
+        </div>
+        <div id="wkCopyMsg" aria-live="polite"></div>
+
+        <div class="wk-note">
+          Copy data copies the numbers only, in the same layout as the table, so they paste straight into the cells of your existing spreadsheet.
+          Copy table with headings also copies the day names and the column headings.
+          UPFSM is the report's UIFSM figure. Adult meals is Staff + Visitors + Others from the report.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Copyright (c) 2026 Elliot Pope. All rights reserved.
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const statusEl = document.getElementById('status');
+    let currentData = null;
+
+    // Class accent colours — used as bars/borders, not fills, to keep ink use down
+    const CLASS_PALETTE = ['#38761d', '#1155cc', '#b45f06', '#990000', '#674ea7',
+                            '#bf9000', '#0b5394', '#a64d79', '#134f5c', '#741b47'];
+
+    // Meal colours — separate palette so meal-type and class-type coding never clash
+    const MEAL_PALETTE = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400',
+                           '#16a085', '#f39c12', '#2c3e50', '#c2185b', '#00838f'];
+
+    // --- Pagination assumptions (A4, 10mm margins, 15px table font) ---
+    // These are conservative estimates, not a precise page-height measurement
+    // (browsers don't expose one). If real prints overflow a page, or leave too
+    // much empty space, adjust these two numbers.
+    const ROWS_FIRST_PAGE = 16;   // rows that fit alongside the title
+    const ROWS_CONTINUATION_PAGE = 25; // rows that fit on a continuation page
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) handleFile(fileInput.files[0]);
+    });
+
+    function setStatus(msg, cls) { statusEl.textContent = msg; statusEl.className = cls || ''; }
+
+    function handleFile(file) {
+      setStatus('');
+      const fileDate = extractDateFromFilename(file.name);
+      const today = new Date(); today.setHours(0,0,0,0);
+      if (fileDate && fileDate.dateObj.getTime() !== today.getTime()) {
+        showDateConfirm(fileDate, () => readFile(file));
+      } else {
+        readFile(file);
+      }
+    }
+
+    function extractDateFromFilename(name) {
+      const m = name.match(/(\d{2})_(\d{2})_(\d{4})/);
+      if (!m) return null;
+      const day = parseInt(m[1], 10), month = parseInt(m[2], 10), year = parseInt(m[3], 10);
+      const dateObj = new Date(year, month - 1, day);
+      dateObj.setHours(0,0,0,0);
+      if (isNaN(dateObj.getTime())) return null;
+      return { day, month, year, dateObj };
+    }
+
+    function formatDate(d) {
+      return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+
+    function showDateConfirm(fileDate, onConfirm) {
+      const overlay = document.getElementById('modalOverlay');
+      const text = document.getElementById('modalText');
+      const today = new Date();
+      text.textContent = 'This report\u2019s filename is dated ' + formatDate(fileDate.dateObj) +
+        ', but today is ' + formatDate(today) + '. Continue with this file anyway?';
+      overlay.style.display = 'flex';
+      const confirmBtn = document.getElementById('modalConfirm');
+      const cancelBtn = document.getElementById('modalCancel');
+      const cleanup = () => { overlay.style.display = 'none'; confirmBtn.onclick = null; cancelBtn.onclick = null; };
+      confirmBtn.onclick = () => { cleanup(); onConfirm(); };
+      cancelBtn.onclick = () => { cleanup(); fileInput.value = ''; };
+    }
+
+    function readFile(file) {
+      setStatus('Reading file\u2026', 'working');
+      const reader = new FileReader();
+      reader.onload = e => {
+        try { processReport(e.target.result, file.name); }
+        catch (err) { setStatus('Error: ' + err.message, 'error'); }
+      };
+      reader.onerror = () => setStatus('Could not read the file.', 'error');
+      reader.readAsArrayBuffer(file);
+    }
+
+    function parseCsvData(arrayBuffer) {
+      const wb = XLSX.read(arrayBuffer, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false });
+
+      let headerRowIdx = -1;
+      for (let i = 0; i < Math.min(rows.length, 10); i++) {
+        if (rows[i].some(cell => String(cell).trim().toLowerCase() === 'name')) { headerRowIdx = i; break; }
+      }
+      if (headerRowIdx === -1) throw new Error('Could not find a header row containing "Name".');
+
+      const headers = rows[headerRowIdx].map(h => String(h).trim());
+      const dataRows = rows.slice(headerRowIdx + 1);
+
+      const nameCol = headers.indexOf('Name');
+      const classCol = headers.indexOf('Reg. group');
+      const dietCol = headers.indexOf('Dietary needs');
+      const mealTypeCol = headers.indexOf('Meal type');
+      if (nameCol === -1 || classCol === -1) throw new Error('Could not find "Name" or "Reg. group" columns.');
+
+      const mealCols = [];
+      for (let c = mealTypeCol + 1; c < headers.length; c++) {
+        if (headers[c]) mealCols.push({ index: c, name: headers[c] });
+      }
+
+      const pupils = [];
+      dataRows.forEach(row => {
+        const name = String(row[nameCol] || '').trim();
+        if (!name) return;
+        let meal = '';
+        for (const mc of mealCols) {
+          const val = row[mc.index];
+          if (val !== '' && val !== null && val !== undefined) { meal = mc.name; break; }
+        }
+        pupils.push({
+          name: name,
+          className: row[classCol] || 'Unassigned',
+          dietary: dietCol !== -1 ? String(row[dietCol] || '').trim() : '',
+          meal: meal || 'Not booked'
+        });
+      });
+      if (!pupils.length) throw new Error('No pupil rows found under the header row.');
+
+      const byClass = {};
+      pupils.forEach(p => { (byClass[p.className] = byClass[p.className] || []).push(p); });
+      Object.keys(byClass).forEach(cls => byClass[cls].sort((a,b) => a.name.localeCompare(b.name)));
+      const classNames = Object.keys(byClass).sort();
+      const mealNames = mealCols.map(m => m.name);
+
+      return { pupils, byClass, classNames, mealNames };
+    }
+
+    function processReport(arrayBuffer, filename) {
+      const parsed = parseCsvData(arrayBuffer);
+
+      const mealColorMap = {};
+      parsed.mealNames.forEach((m, i) => { mealColorMap[m] = MEAL_PALETTE[i % MEAL_PALETTE.length]; });
+      mealColorMap['Not booked'] = '#888888';
+
+      const fileDate = extractDateFromFilename(filename);
+      const dateLabel = fileDate ? formatDate(fileDate.dateObj) : 'date unknown';
+
+      currentData = Object.assign({}, parsed, { mealColorMap, dateLabel, comparison: null });
+      showSelectScreen(currentData);
+    }
+
+    function countMeals(pupilList, mealNames) {
+      const totals = {};
+      mealNames.forEach(m => totals[m] = 0);
+      pupilList.forEach(p => { totals[p.meal] = (totals[p.meal] || 0) + 1; });
+      return totals;
+    }
+
+    function showSelectScreen(data) {
+      document.getElementById('uploadScreen').style.display = 'none';
+      document.getElementById('selectScreen').style.display = 'flex';
+
+      const list = document.getElementById('classCheckboxList');
+      list.innerHTML = '';
+      data.classNames.forEach((cls, i) => {
+        const color = CLASS_PALETTE[i % CLASS_PALETTE.length];
+        const count = data.byClass[cls].length;
+        const row = document.createElement('div');
+        row.className = 'select-row';
+        row.innerHTML =
+          '<span class="dot" style="background:' + color + '"></span>' +
+          '<label for="chk_' + i + '">' + escapeHtml(cls) + ' (' + count + ' pupils)</label>' +
+          '<input type="checkbox" id="chk_' + i + '" data-class="' + i + '" checked>';
+        list.appendChild(row);
+      });
+
+      document.getElementById('selectAllBtn').onclick = () => {
+        list.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = true);
+      };
+      document.getElementById('selectNoneBtn').onclick = () => {
+        list.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+      };
+      document.getElementById('printBtn').onclick = () => printSelected(data);
+
+      const compareInput = document.getElementById('compareFileInput');
+      const compareStatus = document.getElementById('compareStatus');
+      compareInput.value = '';
+      compareStatus.textContent = '';
+      compareInput.onchange = () => {
+        const file = compareInput.files[0];
+        if (!file) return;
+        compareStatus.textContent = 'Reading\u2026';
+        compareStatus.style.color = '#666';
+        const reader = new FileReader();
+        reader.onload = e => {
+          try {
+            const parsed = parseCsvData(e.target.result);
+            data.comparison = Object.assign({}, parsed, { fileLabel: file.name });
+            compareStatus.textContent = 'Comparing against: ' + file.name + ' (' + parsed.pupils.length + ' pupils)';
+            compareStatus.style.color = '#1a7f37';
+          } catch (err) {
+            data.comparison = null;
+            compareStatus.textContent = 'Error: ' + err.message;
+            compareStatus.style.color = '#b00020';
+          }
+        };
+        reader.onerror = () => {
+          compareStatus.textContent = 'Could not read the file.';
+          compareStatus.style.color = '#b00020';
+        };
+        reader.readAsArrayBuffer(file);
+      };
+    }
+
+    function backToSelection() {
+      document.getElementById('output').style.display = 'none';
+      document.getElementById('toolbar').style.display = 'none';
+      document.getElementById('selectScreen').style.display = 'flex';
+    }
+
+    function resetApp() {
+      currentData = null;
+      fileInput.value = '';
+      document.getElementById('output').innerHTML = '';
+      document.getElementById('output').style.display = 'none';
+      document.getElementById('toolbar').style.display = 'none';
+      document.getElementById('selectScreen').style.display = 'none';
+      document.getElementById('uploadScreen').style.display = 'flex';
+      setStatus('');
+      document.title = 'Booking List Converter';
+    }
+
+    function printSelected(data) {
+      const includeSummary = document.getElementById('chkSummary').checked;
+      const checked = Array.from(document.querySelectorAll('#classCheckboxList input[type=checkbox]'))
+        .map((cb, i) => cb.checked ? data.classNames[i] : null)
+        .filter(Boolean);
+
+      if (!includeSummary && checked.length === 0) {
+        alert('Select at least one thing to print.');
+        return;
+      }
+
+      buildOutput(data, checked, includeSummary);
+      document.getElementById('selectScreen').style.display = 'none';
+      document.getElementById('toolbar').style.display = 'block';
+      document.getElementById('output').style.display = 'block';
+      setTimeout(() => window.print(), 200);
+    }
+
+    function formatDelta(n) {
+      if (n > 0) return '<span class="delta-up">+' + n + '</span>';
+      if (n < 0) return '<span class="delta-down">' + n + '</span>';
+      return '<span class="delta-same">0</span>';
+    }
+
+    function totalsTable(totals, mealColorMap, changeMap) {
+      const rows = Object.entries(totals);
+      let grand = 0, grandChange = 0;
+      rows.forEach(([,c]) => grand += c);
+      let html = '<table class="totals-table"><tr><th>Meal</th><th class="count">Count</th>' +
+        (changeMap ? '<th class="change">Change</th>' : '') + '</tr>';
+      rows.forEach(([name, count]) => {
+        html += '<tr><td><span class="row-dot" style="background:' + (mealColorMap[name] || '#888') + '"></span>' +
+          escapeHtml(name) + '</td><td class="count">' + count + '</td>' +
+          (changeMap ? '<td class="change">' + formatDelta(changeMap[name] || 0) + '</td>' : '') + '</tr>';
+      });
+      if (changeMap) grandChange = Object.values(changeMap).reduce((a,b) => a + b, 0);
+      html += '<tr class="grand-total"><td>TOTAL</td><td class="count">' + grand + '</td>' +
+        (changeMap ? '<td class="change">' + formatDelta(grandChange) + '</td>' : '') + '</tr></table>';
+      return html;
+    }
+
+    function totalsRowHtml(classTotals, mealNames) {
+      const cells = mealNames.map(m => '<td class="meal-col">' + (classTotals[m] || 0) + '</td>').join('');
+      const totalsRow = '<tr class="totals-row"><td>TOTAL</td><td></td>' + cells + '</tr>';
+      const headerRepeat = mealNames.map(m => '<td class="meal-col-head">' + escapeHtml(m) + '</td>').join('');
+      const repeatRow = '<tr class="header-repeat-row"><td></td><td></td>' + headerRepeat + '</tr>';
+      return totalsRow + repeatRow;
+    }
+
+    function printedFooter() {
+      const now = new Date();
+      return '<div class="print-footer">Printed ' + now.toLocaleDateString('en-GB') + ' ' +
+        now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + '</div>';
+    }
+
+    function chunkRows(n, first, cont) {
+      const chunks = [];
+      if (n <= first) { chunks.push(n); return chunks; }
+      chunks.push(first);
+      let remaining = n - first;
+      while (remaining > 0) {
+        const size = Math.min(cont, remaining);
+        chunks.push(size);
+        remaining -= size;
+      }
+      return chunks;
+    }
+
+    function buildRowHtml(p, mealNames, mealColorMap) {
+      const dietText = p.dietary ? ('\u26a0 ' + escapeHtml(p.dietary)) : '';
+      const dietCellClass = p.dietary ? ' class="dietary-cell"' : '';
+      let mealCells = '';
+      mealNames.forEach(m => {
+        if (p.meal === m) {
+          mealCells += '<td class="meal-col" style="color:' + (mealColorMap[m] || '#333') + '">\u2713</td>';
+        } else {
+          mealCells += '<td class="meal-col"></td>';
+        }
+      });
+      return '<tr><td>' + escapeHtml(p.name) + '</td><td' + dietCellClass + '>' + dietText + '</td>' +
+        mealCells + '</tr>';
+    }
+
+    function buildOutput(data, selectedClasses, includeSummary) {
+      const { pupils, byClass, classNames, mealNames, mealColorMap, dateLabel } = data;
+      document.title = 'Meal Report - ' + dateLabel;
+      const output = document.getElementById('output');
+      output.innerHTML = '';
+
+      const selectedSet = new Set(selectedClasses);
+      const relevantPupils = pupils.filter(p => selectedSet.has(p.className));
+
+      if (includeSummary) {
+        const summary = document.createElement('div');
+        summary.id = 'summarySection';
+        const basisPupils = relevantPupils.length ? relevantPupils : pupils;
+        const grandTotals = countMeals(basisPupils, mealNames);
+
+        let changeMap = null, compareNoteHtml = '';
+        if (data.comparison) {
+          const earlierTotals = countMeals(data.comparison.pupils, data.comparison.mealNames);
+          const allMealNames = new Set([...mealNames, ...data.comparison.mealNames]);
+          changeMap = {};
+          allMealNames.forEach(m => { changeMap[m] = (grandTotals[m] || 0) - (earlierTotals[m] || 0); });
+          const netChange = Object.values(changeMap).reduce((a,b) => a + b, 0);
+          compareNoteHtml = '<div class="compare-note">Compared with earlier report (' +
+            escapeHtml(data.comparison.fileLabel) + '): net change ' + formatDelta(netChange) + ' meals</div>';
+        }
+
+        summary.innerHTML =
+          '<div class="report-title">Meal Report: ' + escapeHtml(dateLabel) + '</div>' +
+          '<div class="report-sub">' + basisPupils.length + ' pupils selected for this print</div>' +
+          '<div class="section-heading">Totals for kitchen prep</div>' +
+          compareNoteHtml +
+          totalsTable(grandTotals, mealColorMap, changeMap) +
+          printedFooter();
+        output.appendChild(summary);
+
+        // Duplex safety: the totals page is one sheet on its own. Without padding,
+        // the first class would start printing on the back of this sheet.
+        const anyClassesSelected = classNames.some(c => selectedSet.has(c));
+        if (anyClassesSelected) {
+          output.insertAdjacentHTML('beforeend',
+            '<div class="sheet-page blank-page"><div class="blank-note">' +
+            '(back of totals sheet left blank so the first class starts on a new sheet)</div></div>');
+        }
+      }
+
+      classNames.forEach((cls, ci) => {
+        if (!selectedSet.has(cls)) return;
+        const color = CLASS_PALETTE[ci % CLASS_PALETTE.length];
+        const classPupils = byClass[cls];
+        const classTotals = countMeals(classPupils, mealNames);
+        const dietaryCount = classPupils.filter(p => p.dietary).length;
+
+        const chunks = chunkRows(classPupils.length, ROWS_FIRST_PAGE, ROWS_CONTINUATION_PAGE);
+        let cursor = 0;
+
+        chunks.forEach((size, idx) => {
+          const chunkPupils = classPupils.slice(cursor, cursor + size);
+          cursor += size;
+          const isFirst = idx === 0;
+          const isLast = idx === chunks.length - 1;
+
+          let html = '<div class="sheet-page">';
+          html += '<div class="class-bar" style="background:' + color + '"></div>';
+
+          if (isFirst) {
+            html += '<div class="class-title" style="border-left-color:' + color + '; color:' + color + '">' +
+              escapeHtml(cls) + ' (' + classPupils.length + ' pupils)' +
+              (chunks.length > 1 ? ' (sheet 1 of ' + chunks.length + ')' : '') + '</div>';
+          } else {
+            html += '<div class="class-continued" style="color:' + color + '">' + escapeHtml(cls) +
+              ' (continued, sheet ' + (idx + 1) + ' of ' + chunks.length + ')</div>';
+          }
+
+          const mealHeaders = mealNames.map(m => '<th class="meal-col-head">' + escapeHtml(m) + '</th>').join('');
+          const rowsHtml = chunkPupils.map(p => buildRowHtml(p, mealNames, mealColorMap)).join('');
+          const footerRow = isLast ? totalsRowHtml(classTotals, mealNames) : '';
+          html += '<table class="meal-table" style="border-color:' + color + '">' +
+            '<tr><th>Name</th><th>Dietary Needs</th>' + mealHeaders + '</tr>' +
+            rowsHtml + footerRow + '</table>';
+
+          if (isLast) {
+            html += '<div class="class-bar bottom" style="background:' + color + '"></div>';
+            html += printedFooter();
+          }
+
+          html += '</div>';
+          output.insertAdjacentHTML('beforeend', html);
+        });
+
+        // Duplex safety: pad to an even number of sheets so the next class
+        // always starts on the front of a fresh sheet, never the back of this one.
+        if (chunks.length % 2 !== 0) {
+          output.insertAdjacentHTML('beforeend',
+            '<div class="sheet-page blank-page"><div class="blank-note">' +
+            '(back of sheet left blank so the next class starts on a new sheet)</div></div>');
+        }
+      });
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+    // ============================================================
+    // Tool menu (top right) and switching between the two tools
+    // ============================================================
+    const TOOL_LABELS = { booking: 'Booking List Converter', weekly: 'Weekly Meal Reconciliation' };
+    let activeTool = 'booking';
+    let savedBookingTitle = document.title || TOOL_LABELS.booking;
+
+    const menuBtn = document.getElementById('menuBtn');
+    const menuList = document.getElementById('menuList');
+
+    function setMenuOpen(open) {
+      menuList.hidden = !open;
+      menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function switchTool(tool) {
+      setMenuOpen(false);
+      if (!TOOL_LABELS[tool] || tool === activeTool) return;
+      if (activeTool === 'booking') savedBookingTitle = document.title || TOOL_LABELS.booking;
+      activeTool = tool;
+      document.getElementById('toolBooking').style.display = tool === 'booking' ? 'block' : 'none';
+      document.getElementById('toolWeekly').style.display = tool === 'weekly' ? 'block' : 'none';
+      document.getElementById('menuCurrent').textContent = TOOL_LABELS[tool];
+      document.querySelectorAll('.menu-item').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-tool') === tool);
+      });
+      document.title = tool === 'booking' ? savedBookingTitle : TOOL_LABELS.weekly;
+      window.scrollTo(0, 0);
+    }
+
+    menuBtn.addEventListener('click', e => { e.stopPropagation(); setMenuOpen(menuList.hidden); });
+    document.addEventListener('click', () => setMenuOpen(false));
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !menuList.hidden) { setMenuOpen(false); menuBtn.focus(); }
+    });
+    menuList.querySelectorAll('.menu-item').forEach(btn => {
+      btn.addEventListener('click', () => switchTool(btn.getAttribute('data-tool')));
+    });
+
+    // ============================================================
+    // Weekly meal reconciliation
+    // ============================================================
+
+    // ===== WEEKLY LOGIC START (no page elements used in here) =====
+    const WK_YEARS = [
+      { key: 'R', label: 'Reception' }, { key: '1', label: 'Yr1' }, { key: '2', label: 'Yr2' },
+      { key: '3', label: 'Yr3' }, { key: '4', label: 'Yr4' }, { key: '5', label: 'Yr5' },
+      { key: '6', label: 'Yr6' }
+    ];
+    const WK_DAYS = [
+      { wd: 1, label: 'Mon', name: 'Monday' },
+      { wd: 2, label: 'Tues', name: 'Tuesday' },
+      { wd: 3, label: 'Wed', name: 'Wednesday' },
+      { wd: 4, label: 'Thurs', name: 'Thursday' },
+      { wd: 5, label: 'Friday', name: 'Friday' }
+    ];
+    const WK_MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july',
+                       'august', 'september', 'october', 'november', 'december'];
+
+    // Reads CSV text into rows of strings. Handles quoted fields, doubled quotes,
+    // a leading byte order mark and Windows line endings. Written by hand (rather
+    // than using the spreadsheet library) so dates like "16 October 2026" and
+    // numbers stay exactly as text and are never converted.
+    function parseCsvText(text) {
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      const rows = [];
+      let row = [], field = '', inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQuotes) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i++; }
+            else inQuotes = false;
+          } else field += c;
+        } else if (c === '"') {
+          inQuotes = true;
+        } else if (c === ',') {
+          row.push(field); field = '';
+        } else if (c === '\n' || c === '\r') {
+          if (c === '\r' && text[i + 1] === '\n') i++;
+          row.push(field); rows.push(row); row = []; field = '';
+        } else {
+          field += c;
+        }
+      }
+      if (field !== '' || row.length) { row.push(field); rows.push(row); }
+      return rows;
+    }
+
+    // The report is several small tables stacked in one file. Each has a title
+    // line, a header line, some data lines, then a blank line.
+    function parseWeeklySections(rows) {
+      const isBlank = r => r.every(c => String(c).trim() === '');
+      const filled = r => r.filter(c => String(c).trim() !== '').length;
+      const sections = [];
+      let i = 0;
+      while (i < rows.length) {
+        const r = rows[i];
+        if (!isBlank(r) && filled(r) === 1 && String(r[0]).trim() !== '' &&
+            i + 1 < rows.length && !isBlank(rows[i + 1])) {
+          const title = String(r[0]).trim();
+          const headers = rows[i + 1].map(c => String(c).trim());
+          const dataRows = [];
+          i += 2;
+          while (i < rows.length && !isBlank(rows[i])) {
+            dataRows.push(rows[i].map(c => String(c).trim()));
+            i++;
+          }
+          sections.push({ title: title, headers: headers, rows: dataRows });
+        } else {
+          i++;
+        }
+      }
+      return sections;
+    }
+
+    function parseReportDate(label) {
+      let m = String(label).trim().match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+      let d = null;
+      if (m) {
+        const mi = WK_MONTHS.indexOf(m[2].toLowerCase());
+        if (mi === -1) return null;
+        d = new Date(parseInt(m[3], 10), mi, parseInt(m[1], 10));
+      } else {
+        m = String(label).trim().match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+        if (!m) return null;
+        d = new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10));
+      }
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    function wkNum(v) {
+      const s = String(v == null ? '' : v).replace(/[,\s]/g, '');
+      if (s === '') return 0;
+      const n = Number(s);
+      if (!isFinite(n)) {
+        throw new Error('Found "' + v + '" where a number was expected. Check this is the Weekly meal numbers report.');
+      }
+      return n;
+    }
+
+    function buildWeeklyModel(rows) {
+      const sections = parseWeeklySections(rows);
+      const fsm = sections.find(s => s.title === 'FSM');
+      const uifsm = sections.find(s => s.title === 'UIFSM');
+      const summary = sections.find(s => s.headers.indexOf('Staff') !== -1 &&
+                                         s.headers.indexOf('Total pupil meals') !== -1);
+      if (!fsm || !uifsm || !summary) {
+        throw new Error('This does not look like the Weekly meal numbers report (Report 14). ' +
+                        'Check you exported the right report from ParentPay.');
+      }
+
+      const fsmCols = WK_YEARS.map(y => fsm.headers.indexOf(y.key));
+      const uifsmCols = WK_YEARS.map(y => uifsm.headers.indexOf(y.key));
+      if (fsmCols.concat(uifsmCols).some(i => i === -1)) {
+        throw new Error('The year group columns are missing. In ParentPay set both Show Infant and ' +
+                        'Show Junior to True, then export the report again.');
+      }
+      const totalIdx = summary.headers.indexOf('Total pupil meals');
+      const adultIdx = ['Staff', 'Visitors', 'Others']
+        .map(h => summary.headers.indexOf(h)).filter(i => i !== -1);
+      const adultOf = r => adultIdx.reduce((t, i) => t + wkNum(r[i]), 0);
+
+      const dated = fsm.rows
+        .map(r => ({ row: r, date: parseReportDate(r[0]) }))
+        .filter(x => x.date);
+      if (!dated.length) throw new Error('Could not find any dates in the report.');
+
+      const warnings = [];
+      const cellCount = WK_YEARS.length * 2;
+
+      const days = WK_DAYS.map(def => {
+        const matches = dated.filter(x => x.date.getDay() === def.wd);
+        if (matches.length > 1) {
+          throw new Error('This report covers more than one week. Run it for a single week, ' +
+                          'Monday to Friday, and try again.');
+        }
+        if (!matches.length) {
+          warnings.push('There is no ' + def.name + ' in this report, so that row is left blank.');
+          return { label: def.label, present: false, cells: new Array(cellCount).fill(0), daily: 0, adult: 0 };
+        }
+        const fsmRow = matches[0].row;
+        const dateLabel = fsmRow[0];
+        const uifsmRow = uifsm.rows.find(r => r[0] === dateLabel);
+        const sumRow = summary.rows.find(r => r[0] === dateLabel);
+        if (!uifsmRow || !sumRow) {
+          throw new Error('The report is missing some of the figures for ' + dateLabel + '.');
+        }
+        const cells = [];
+        WK_YEARS.forEach((y, i) => {
+          cells.push(wkNum(fsmRow[fsmCols[i]]));
+          cells.push(wkNum(uifsmRow[uifsmCols[i]]));
+        });
+        const daily = wkNum(sumRow[totalIdx]);
+        const adult = adultOf(sumRow);
+        const shown = cells.reduce((a, b) => a + b, 0);
+        if (shown !== daily) {
+          warnings.push(def.name + ': the year group columns add up to ' + shown +
+            ' but the report shows ' + daily + ' pupil meals in total. The difference may be ' +
+            'pupils outside Reception to Year 6, or EFSM, OFSM or billed meals.');
+        }
+        return { label: def.label, present: true, cells: cells, daily: daily, adult: adult };
+      });
+
+      summary.rows.forEach(r => {
+        const d = parseReportDate(r[0]);
+        if (d && (d.getDay() === 0 || d.getDay() === 6)) {
+          const total = wkNum(r[totalIdx]) + adultOf(r);
+          if (total > 0) {
+            warnings.push(r[0] + ' has ' + total + ' meals in the report, but weekends are not included in the table.');
+          }
+        }
+      });
+
+      const subCells = new Array(cellCount).fill(0);
+      days.forEach(d => d.cells.forEach((v, i) => { subCells[i] += v; }));
+      const subtotal = {
+        cells: subCells,
+        daily: days.reduce((t, d) => t + d.daily, 0),
+        adult: days.reduce((t, d) => t + d.adult, 0)
+      };
+
+      const allDates = dated.map(x => x.date).sort((a, b) => a - b);
+      return { days: days, subtotal: subtotal, warnings: warnings,
+               from: allDates[0], to: allDates[allDates.length - 1] };
+    }
+
+    // Builds the tab separated text that spreadsheets understand when pasted.
+    // opts.subtotal and opts.daily say whether to include the subtotal row and
+    // the daily subtotal / adult meals columns.
+    function wkBuildCopyText(model, withHeadings, opts) {
+      const rows = [];
+      if (withHeadings) {
+        const h1 = [''], h2 = [''];
+        WK_YEARS.forEach(y => { h1.push(y.label, ''); h2.push('FSM', 'UPFSM'); });
+        if (opts.daily) { h1.push('Daily Subtotal', 'Adult Meals'); h2.push('', ''); }
+        rows.push(h1, h2);
+      }
+      const line = (label, cells, daily, adult, present) => {
+        const r = [];
+        if (withHeadings) r.push(label);
+        cells.forEach(v => r.push(present ? String(v) : ''));
+        if (opts.daily) r.push(present ? String(daily) : '', present ? String(adult) : '');
+        return r;
+      };
+      model.days.forEach(d => rows.push(line(d.label, d.cells, d.daily, d.adult, d.present)));
+      if (opts.subtotal) {
+        rows.push(line('Subtotal', model.subtotal.cells, model.subtotal.daily, model.subtotal.adult, true));
+      }
+      return rows.map(r => r.join('\t')).join('\n');
+    }
+
+    function renderWeeklyTable(model) {
+      let h = '<table class="weekly-table"><thead><tr><th rowspan="2"></th>';
+      WK_YEARS.forEach(y => { h += '<th colspan="2" class="ps">' + escapeHtml(y.label) + '</th>'; });
+      h += '<th rowspan="2" class="ps">Daily Subtotal</th><th rowspan="2">Adult Meals</th></tr><tr>';
+      WK_YEARS.forEach(() => { h += '<th class="sub ps">FSM</th><th class="sub">UPFSM</th>'; });
+      h += '</tr></thead><tbody>';
+      const rowHtml = (label, cells, daily, adult, present, cls) => {
+        let r = '<tr' + (cls ? ' class="' + cls + '"' : '') + '><th scope="row">' + escapeHtml(label) + '</th>';
+        cells.forEach((v, i) => {
+          r += '<td' + (i % 2 === 0 ? ' class="ps"' : '') + '>' + (present ? v : '') + '</td>';
+        });
+        r += '<td class="ps">' + (present ? daily : '') + '</td><td>' + (present ? adult : '') + '</td></tr>';
+        return r;
+      };
+      model.days.forEach(d => { h += rowHtml(d.label, d.cells, d.daily, d.adult, d.present, ''); });
+      h += rowHtml('Subtotal', model.subtotal.cells, model.subtotal.daily, model.subtotal.adult, true, 'wk-subtotal');
+      return h + '</tbody></table>';
+    }
+    // ===== WEEKLY LOGIC END =====
+
+    const wkDropzone = document.getElementById('weeklyDropzone');
+    const wkFileInput = document.getElementById('weeklyFileInput');
+    const wkStatus = document.getElementById('weeklyStatus');
+    let wkModel = null;
+
+    function setWkStatus(msg, cls) { wkStatus.textContent = msg; wkStatus.className = cls || ''; }
+
+    wkDropzone.addEventListener('click', () => wkFileInput.click());
+    wkDropzone.addEventListener('dragover', e => { e.preventDefault(); wkDropzone.classList.add('dragover'); });
+    wkDropzone.addEventListener('dragleave', () => wkDropzone.classList.remove('dragover'));
+    wkDropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      wkDropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleWeeklyFile(e.dataTransfer.files[0]);
+    });
+    wkFileInput.addEventListener('change', () => {
+      if (wkFileInput.files.length) handleWeeklyFile(wkFileInput.files[0]);
+    });
+
+    function handleWeeklyFile(file) {
+      setWkStatus('Reading file\u2026', 'working');
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          wkModel = buildWeeklyModel(parseCsvText(String(e.target.result)));
+          showWeeklyResult(wkModel);
+          setWkStatus('');
+        } catch (err) {
+          wkModel = null;
+          setWkStatus('Error: ' + err.message, 'error');
+        }
+        wkFileInput.value = '';
+      };
+      reader.onerror = () => setWkStatus('Could not read the file.', 'error');
+      reader.readAsText(file);
+    }
+
+    function showWeeklyResult(model) {
+      document.getElementById('wkRange').textContent =
+        'Report covers ' + formatDate(model.from) + ' to ' + formatDate(model.to);
+      const box = document.getElementById('wkWarnings');
+      if (model.warnings.length) {
+        box.innerHTML = '<b>Please check:</b><ul>' +
+          model.warnings.map(w => '<li>' + escapeHtml(w) + '</li>').join('') + '</ul>';
+        box.style.display = 'block';
+      } else {
+        box.style.display = 'none';
+      }
+      document.getElementById('wkTableWrap').innerHTML = renderWeeklyTable(model);
+      const msg = document.getElementById('wkCopyMsg');
+      msg.textContent = '';
+      msg.className = '';
+      document.getElementById('weeklyUploadScreen').style.display = 'none';
+      document.getElementById('weeklyResultScreen').style.display = 'flex';
+    }
+
+    function resetWeekly() {
+      wkModel = null;
+      wkFileInput.value = '';
+      setWkStatus('');
+      document.getElementById('wkTableWrap').innerHTML = '';
+      document.getElementById('weeklyResultScreen').style.display = 'none';
+      document.getElementById('weeklyUploadScreen').style.display = 'flex';
+    }
+
+    // Copies text using the modern clipboard API where the browser allows it, and
+    // falls back to the older select-and-copy method (which still works inside
+    // embedded pages such as Apps Script web apps).
+    function wkCopyText(text) {
+      return new Promise((resolve, reject) => {
+        const fallback = () => {
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.top = '0';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            ta.setSelectionRange(0, text.length);
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (ok) resolve(); else reject(new Error('copy failed'));
+          } catch (err) { reject(err); }
+        };
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(resolve, fallback);
+          } else {
+            fallback();
+          }
+        } catch (err) { fallback(); }
+      });
+    }
+
+    function wkSelectTable() {
+      const t = document.querySelector('#wkTableWrap table');
+      if (!t) return;
+      const range = document.createRange();
+      range.selectNodeContents(t);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    function wkDoCopy(withHeadings) {
+      if (!wkModel) return;
+      const text = wkBuildCopyText(wkModel, withHeadings, {
+        subtotal: document.getElementById('wkOptSubtotal').checked,
+        daily: document.getElementById('wkOptDaily').checked
+      });
+      const msg = document.getElementById('wkCopyMsg');
+      wkCopyText(text).then(() => {
+        msg.className = 'ok';
+        msg.textContent = (withHeadings ? 'Table copied' : 'Data copied') + '. Now paste it into your spreadsheet.';
+      }, () => {
+        wkSelectTable();
+        msg.className = 'err';
+        msg.textContent = 'Your browser blocked automatic copying. The table is now selected, so press Ctrl+C to copy it instead.';
+      });
+    }
+
+    document.getElementById('wkCopyData').addEventListener('click', () => wkDoCopy(false));
+    document.getElementById('wkCopyTable').addEventListener('click', () => wkDoCopy(true));
+    document.getElementById('wkAnother').addEventListener('click', resetWeekly);
+
+  </script>
+</body>
+</html>
