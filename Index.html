@@ -139,8 +139,13 @@
       padding: 7px 4px;
     }
     .totals-table th { border-bottom: 2px solid #999; }
-    .totals-table td.count, .totals-table th.count { text-align: center; width: 70px; }
-    .totals-table td.change, .totals-table th.change { text-align: center; width: 80px; }
+    .totals-table td.count, .totals-table th.count { text-align: center; width: 56px; }
+    .totals-table td.change, .totals-table th.change { text-align: center; width: 64px; }
+    .totals-table td.yr, .totals-table th.yr { text-align: center; width: 42px; padding-left: 2px; padding-right: 2px; }
+    .totals-table th.yr { font-size: 13px; }
+    .totals-table td.yr.zero { color: #bbb; }
+    .totals-table td.count, .totals-table th.count { border-left: 1px solid #ccc; }
+    .yr-note { font-size: 11px; color: #555; margin: -4px 0 10px 0; line-height: 1.4; }
     .totals-table tr.grand-total td { font-weight: bold; border-top: 3px double #333; border-bottom: none; }
     .row-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle;
                -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -614,6 +619,39 @@
       showSelectScreen(currentData);
     }
 
+    // Works out which year group a pupil is in from their reg. group, for example
+    // "Year 4 Sullivan" is Year 4 and "Reception Wood" is Reception. Mixed classes
+    // such as "Reception/Year 1 Walton", and anything not recognised, go in Other.
+    const YEAR_COLS = [
+      { key: 'R', label: 'Rec' }, { key: '1', label: 'Yr1' }, { key: '2', label: 'Yr2' },
+      { key: '3', label: 'Yr3' }, { key: '4', label: 'Yr4' }, { key: '5', label: 'Yr5' },
+      { key: '6', label: 'Yr6' }
+    ];
+    function yearKeyOf(regGroup) {
+      const t = String(regGroup || '').trim();
+      if (/^(reception|rec)\b\s*[\/&,+-]/i.test(t)) return 'Other';
+      if (/^(year|yr|y)\s*\d{1,2}\s*[\/&,+-]/i.test(t)) return 'Other';
+      if (/^(reception|rec)\b/i.test(t)) return 'R';
+      const m = t.match(/^(?:year|yr|y)\s*([1-6])\b/i);
+      return m ? m[1] : 'Other';
+    }
+
+    // Counts each meal by year group. Only year groups that have pupils are returned,
+    // so printing a few classes does not leave empty columns.
+    function countMealsByYear(pupilList) {
+      const counts = {}, colTotals = {}, otherGroups = {};
+      pupilList.forEach(p => {
+        const k = yearKeyOf(p.className);
+        (counts[p.meal] = counts[p.meal] || {})[k] = ((counts[p.meal] || {})[k] || 0) + 1;
+        colTotals[k] = (colTotals[k] || 0) + 1;
+        if (k === 'Other') otherGroups[p.className] = (otherGroups[p.className] || 0) + 1;
+      });
+      const cols = YEAR_COLS.filter(c => colTotals[c.key]);
+      if (colTotals.Other) cols.push({ key: 'Other', label: 'Other' });
+      const otherList = Object.keys(otherGroups).sort().map(n => ({ name: n, n: otherGroups[n] }));
+      return { cols: cols, counts: counts, colTotals: colTotals, otherList: otherList };
+    }
+
     function countMeals(pupilList, mealNames) {
       const totals = {};
       mealNames.forEach(m => totals[m] = 0);
@@ -746,20 +784,32 @@
       return '<span class="delta-same">0</span>';
     }
 
-    function totalsTable(totals, mealColorMap, changeMap) {
+    function totalsTable(totals, mealColorMap, changeMap, yearData) {
       const rows = Object.entries(totals);
+      const cols = yearData ? yearData.cols : [];
       let grand = 0, grandChange = 0;
       rows.forEach(([,c]) => grand += c);
-      let html = '<table class="totals-table"><tr><th>Meal</th><th class="count">Count</th>' +
+      let html = '<table class="totals-table"><tr><th>Meal</th>' +
+        cols.map(c => '<th class="yr">' + escapeHtml(c.label) + '</th>').join('') +
+        '<th class="count">Total</th>' +
         (changeMap ? '<th class="change">Change</th>' : '') + '</tr>';
       rows.forEach(([name, count]) => {
+        const byYear = (yearData && yearData.counts[name]) || {};
         html += '<tr><td><span class="row-dot" style="background:' + (mealColorMap[name] || '#888') + '"></span>' +
-          escapeHtml(name) + '</td><td class="count">' + count + '</td>' +
+          escapeHtml(name) + '</td>' +
+          cols.map(c => { const v = byYear[c.key] || 0; return '<td class="yr' + (v ? '' : ' zero') + '">' + v + '</td>'; }).join('') +
+          '<td class="count">' + count + '</td>' +
           (changeMap ? '<td class="change">' + formatDelta(changeMap[name] || 0) + '</td>' : '') + '</tr>';
       });
       if (changeMap) grandChange = Object.values(changeMap).reduce((a,b) => a + b, 0);
-      html += '<tr class="grand-total"><td>TOTAL</td><td class="count">' + grand + '</td>' +
+      html += '<tr class="grand-total"><td>TOTAL</td>' +
+        cols.map(c => '<td class="yr">' + ((yearData.colTotals[c.key]) || 0) + '</td>').join('') +
+        '<td class="count">' + grand + '</td>' +
         (changeMap ? '<td class="change">' + formatDelta(grandChange) + '</td>' : '') + '</tr></table>';
+      if (yearData && yearData.otherList.length) {
+        html += '<div class="yr-note"><b>Other</b> is any reg. group that is not a single year group: ' +
+          yearData.otherList.map(o => escapeHtml(o.name) + ' (' + o.n + ')').join(', ') + '.</div>';
+      }
       return html;
     }
 
@@ -819,6 +869,7 @@
         summary.id = 'summarySection';
         const basisPupils = relevantPupils.length ? relevantPupils : pupils;
         const grandTotals = countMeals(basisPupils, mealNames);
+        const yearData = countMealsByYear(basisPupils);
 
         let changeMap = null, compareNoteHtml = '';
         if (data.comparison) {
@@ -862,7 +913,7 @@
           '<div class="report-sub">' + basisPupils.length + ' pupils selected for this print</div>' +
           '<div class="section-heading">Totals for kitchen prep</div>' +
           compareNoteHtml +
-          totalsTable(grandTotals, mealColorMap, changeMap) +
+          totalsTable(grandTotals, mealColorMap, changeMap, yearData) +
           writeInHtml +
           printedFooter();
         output.appendChild(summary);
