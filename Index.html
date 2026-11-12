@@ -885,28 +885,26 @@
             'Pupils who have called in sick etc. have not been taken off these figures.</div>';
         }
 
-        // With a compare file attached the page is filled with a write-in table
-        // for pupils who were not booked on (one column per meal option), plus a
-        // blank spills box for the kitchen to write in.
-        const hasCompare = !!data.comparison;
-        let writeInHtml = '';
-        if (hasCompare) {
-          summary.className = 'summary-fill';
-          const mealHeads = mealNames.map(m =>
-            '<div class="mh"><span class="row-dot" style="background:' + (mealColorMap[m] || '#888') + '"></span>' +
-            escapeHtml(m) + '</div>').join('');
-          writeInHtml =
-            '<div class="writein" style="--wi-cols: 1fr 26mm repeat(' + mealNames.length + ', 15mm)">' +
-              '<div class="writein-top">' +
-                '<div class="writein-title">Pupils not booked on today' +
-                  '<small>Tick or cross the meal each pupil has been served.</small></div>' +
-                '<div class="spills">Spills today <div class="spills-box"></div></div>' +
-              '</div>' +
-              '<div class="writein-note">Please liaise with supervising staff to record accurate names and year groups.</div>' +
-              '<div class="writein-head"><div>Name</div><div>Year group</div>' + mealHeads + '</div>' +
-              '<div class="writein-grid"></div>' +
-            '</div>';
-        }
+        // The page is always filled with a write-in table for pupils who were not
+        // booked on (one column per meal option), plus a blank spills box for the
+        // kitchen to write in. With many meal options the meal columns get narrower
+        // so the Name column always keeps at least 55mm.
+        summary.className = 'summary-fill';
+        const mealWidthMm = Math.min(15, Math.floor(1090 / Math.max(1, mealNames.length)) / 10);
+        const mealHeads = mealNames.map(m =>
+          '<div class="mh"><span class="row-dot" style="background:' + (mealColorMap[m] || '#888') + '"></span>' +
+          escapeHtml(m) + '</div>').join('');
+        const writeInHtml =
+          '<div class="writein" style="--wi-cols: 1fr 26mm repeat(' + mealNames.length + ', ' + mealWidthMm + 'mm)">' +
+            '<div class="writein-top">' +
+              '<div class="writein-title">Pupils not booked on today' +
+                '<small>Tick or cross the meal each pupil has been served.</small></div>' +
+              '<div class="spills">Spills today <div class="spills-box"></div></div>' +
+            '</div>' +
+            '<div class="writein-note">Please liaise with supervising staff to record accurate names and year groups.</div>' +
+            '<div class="writein-head"><div>Name</div><div>Year group</div>' + mealHeads + '</div>' +
+            '<div class="writein-grid"></div>' +
+          '</div>';
 
         summary.innerHTML =
           '<div class="report-title">Meal Report: ' + escapeHtml(dateLabel) + '</div>' +
